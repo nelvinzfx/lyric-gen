@@ -1,9 +1,11 @@
 from fastapi import FastAPI, Query, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 from typing import Optional
 from pydantic import BaseModel
 import httpx
+import os
 
 from .models import SearchResponse, LyricsResponse, ErrorResponse
 from .providers import lrclib, ytmusic, youtube
@@ -116,3 +118,22 @@ async def get_stream(
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
+# Serve React App (Production/Docker)
+static_dir = os.path.join(os.path.dirname(__file__), "static")
+if os.path.exists(static_dir):
+    app.mount("/assets", StaticFiles(directory=os.path.join(static_dir, "assets")), name="assets")
+
+    @app.get("/{catchall:path}")
+    async def serve_react_app(catchall: str):
+        # Don't intercept API calls
+        if catchall.startswith("api/") or catchall.startswith("health"):
+             raise HTTPException(status_code=404)
+        
+        # Check if file exists in static (e.g. favicon.ico)
+        file_path = os.path.join(static_dir, catchall)
+        if os.path.isfile(file_path):
+            return FileResponse(file_path)
+            
+        # Otherwise serve index.html for SPA
+        return FileResponse(os.path.join(static_dir, "index.html"))
