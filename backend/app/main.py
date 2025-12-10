@@ -122,18 +122,29 @@ async def health():
 # Serve React App (Production/Docker)
 static_dir = os.path.join(os.path.dirname(__file__), "static")
 if os.path.exists(static_dir):
+    # Mount static files for assets
     app.mount("/assets", StaticFiles(directory=os.path.join(static_dir, "assets")), name="assets")
-
-    @app.get("/{catchall:path}")
-    async def serve_react_app(catchall: str):
-        # Don't intercept API calls
-        if catchall.startswith("api/") or catchall.startswith("health"):
-             raise HTTPException(status_code=404)
+    
+    # SPA catch-all - must be last and exclude API paths
+    from starlette.routing import Mount, Route
+    from starlette.responses import FileResponse as StarletteFileResponse
+    
+    async def spa_handler(request):
+        path = request.path_params.get("path", "")
         
-        # Check if file exists in static (e.g. favicon.ico)
-        file_path = os.path.join(static_dir, catchall)
-        if os.path.isfile(file_path):
-            return FileResponse(file_path)
-            
-        # Otherwise serve index.html for SPA
-        return FileResponse(os.path.join(static_dir, "index.html"))
+        # Let API routes pass through (they're already handled above)
+        if path.startswith("api/") or path == "health":
+            from starlette.responses import Response
+            return Response(status_code=404)
+        
+        # Try to serve static file
+        file_path = os.path.join(static_dir, path)
+        if path and os.path.isfile(file_path):
+            return StarletteFileResponse(file_path)
+        
+        # SPA fallback
+        return StarletteFileResponse(os.path.join(static_dir, "index.html"))
+    
+    # Add catch-all at the very end of routes
+    app.routes.append(Route("/{path:path}", spa_handler, methods=["GET"]))
+    app.routes.append(Route("/", spa_handler, methods=["GET"]))
