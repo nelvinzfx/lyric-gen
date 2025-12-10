@@ -62,6 +62,7 @@ export const useAppStore = create<AppState>((set) => ({
   lyricFontSize: 24,
   customBackground: null,
   isBackgroundBlurred: true,
+  isVisualizerEnabled: false,
   isLyricClickToSeek: true,
   seekRequest: null,
   theme: 'obsidian',
