@@ -16,6 +16,7 @@ from . import cache
 # Static directory for SPA
 STATIC_DIR = os.path.join(os.path.dirname(__file__), "static")
 SPA_ENABLED = os.path.exists(STATIC_DIR)
+MAINTENANCE_MODE = os.getenv("MAINTENANCE_MODE", "false").lower() == "true"
 
 app = FastAPI(title="SonicScript API", version="1.0.0")
 
@@ -26,6 +27,17 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Maintenance mode middleware
+@app.middleware("http")
+async def maintenance_middleware(request: Request, call_next):
+    if MAINTENANCE_MODE and not request.url.path == "/health":
+        from fastapi.responses import JSONResponse
+        return JSONResponse(
+            {"maintenance": True, "message": "Site is under maintenance. Please check back soon!"},
+            status_code=503
+        )
+    return await call_next(request)
 
 class StreamResponse(BaseModel):
     url: str
