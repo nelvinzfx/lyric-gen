@@ -93,9 +93,10 @@ async def get_stream(
             raise HTTPException(status_code=404, detail={"error": "Track not found", "code": "TRACK_NOT_FOUND"})
         vid = results[0].id.replace("ytm_", "")
     
-    # Return proxy URL instead of direct YouTube URL
-    base_url = str(request.base_url).rstrip('/')
-    proxy_url = f"{base_url}/api/v1/audio/{vid}"
+    # Build proxy URL with correct scheme (respect X-Forwarded-Proto from reverse proxy)
+    scheme = request.headers.get("x-forwarded-proto", request.url.scheme)
+    host = request.headers.get("x-forwarded-host", request.url.netloc)
+    proxy_url = f"{scheme}://{host}/api/v1/audio/{vid}"
     
     # Get duration from cache or fetch
     cache_key = f"duration_{vid}"
