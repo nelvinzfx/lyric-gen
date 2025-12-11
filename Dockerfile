@@ -3,11 +3,9 @@ FROM node:18-alpine as frontend_build
 
 WORKDIR /app
 
-# Install dependencies first for caching
 COPY package*.json ./
 RUN npm ci
 
-# Copy source and build
 COPY . .
 RUN npm run build
 
@@ -16,11 +14,17 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies (ffmpeg + nodejs for yt-dlp)
+# Install system dependencies
 RUN apt-get update && apt-get install -y \
     ffmpeg \
-    nodejs \
+    curl \
+    unzip \
     && rm -rf /var/lib/apt/lists/*
+
+# Install deno for yt-dlp JS runtime
+RUN curl -fsSL https://deno.land/install.sh | sh
+ENV DENO_INSTALL="/root/.deno"
+ENV PATH="${DENO_INSTALL}/bin:${PATH}"
 
 # Install python dependencies
 COPY backend/requirements.txt .
@@ -29,16 +33,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy backend code
 COPY backend/ .
 
-# Copy built frontend assets to backend static directory
-# We create the structure expected by the modified main.py
+# Copy built frontend assets
 RUN mkdir -p app/static
 COPY --from=frontend_build /app/dist /app/app/static
 
-# Expose port (Documentation mostly, Railway ignores this but uses $PORT)
 EXPOSE 8000
 
-# Start command
-# We use sh -c to allow environment variable expansion if needed, 
-# but uvicorn by default listens on port 8000. 
-# Railway sets $PORT, so we need to tell uvicorn to use it.
 CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"

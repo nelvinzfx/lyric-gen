@@ -3,11 +3,15 @@ import yt_dlp
 
 async def get_video_info(query: str):
     ydl_opts = {
-        'format': 'bestaudio/best',
+        'format': 'bestaudio[ext=m4a]/bestaudio/best',
         'noplaylist': True,
         'quiet': True,
-        'key': 'FFmpegExtractAudio',
-        'extractor_args': {'youtube': {'player_client': ['web']}},
+        'no_warnings': False,
+        'extractor_args': {
+            'youtube': {
+                'player_client': ['ios', 'web'],
+            }
+        },
     }
 
     try:
@@ -19,8 +23,23 @@ async def get_video_info(query: str):
                 if 'entries' in info:
                     info = info['entries'][0]
 
+            # Get the actual URL from formats if direct url not available
+            url = info.get('url')
+            if not url and info.get('formats'):
+                # Find best audio format
+                for fmt in reversed(info['formats']):
+                    if fmt.get('url') and fmt.get('acodec') != 'none':
+                        url = fmt['url']
+                        break
+                # Fallback to any format with url
+                if not url:
+                    for fmt in reversed(info['formats']):
+                        if fmt.get('url'):
+                            url = fmt['url']
+                            break
+
             return {
-                "url": info.get('url'),
+                "url": url,
                 "duration": info.get('duration')
             }
     except Exception as e:
