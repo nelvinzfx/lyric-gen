@@ -16,9 +16,10 @@ FROM python:3.12-slim
 
 WORKDIR /app
 
-# Install system dependencies (ffmpeg for potential audio handling)
+# Install system dependencies (ffmpeg + nodejs for yt-dlp)
 RUN apt-get update && apt-get install -y \
     ffmpeg \
+    nodejs \
     && rm -rf /var/lib/apt/lists/*
 
 # Install python dependencies
