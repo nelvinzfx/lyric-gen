@@ -9,7 +9,7 @@ from pydantic import BaseModel
 import os
 
 from .models import SearchResponse, LyricsResponse, ErrorResponse
-from .providers import lrclib, ytmusic
+from .providers import lrclib, ytmusic, youtube
 from . import cache
 
 # Static directory for SPA
@@ -83,12 +83,10 @@ async def get_stream(
     title: Optional[str] = None,
     videoId: Optional[str] = None
 ):
-    # Get video ID - either from param or search
     if videoId:
         vid = videoId.replace("ytm_", "")
         cache_key = f"vid_{vid}"
     else:
-        # Search for the track first
         cache_key = f"{artist} {title}"
         results = await ytmusic.search(f"{artist} {title}", limit=1)
         if not results:
@@ -99,13 +97,13 @@ async def get_stream(
     if cached:
         return StreamResponse(**cached)
     
-    # Use ytmusicapi directly instead of yt-dlp
-    info = await ytmusic.get_stream_url(vid)
+    # Use yt-dlp for stream extraction
+    info = await youtube.get_stream_url(vid)
     if not info or not info.get("url"):
         raise HTTPException(status_code=404, detail={"error": "Audio stream not found", "code": "STREAM_NOT_FOUND"})
     
     result = {"url": info["url"], "duration": info.get("duration")}
-    cache.set("stream", cache_key, result, ttl=3600)  # shorter TTL as URLs expire
+    cache.set("stream", cache_key, result, ttl=3600)
     return StreamResponse(**result)
 
 # Include API router FIRST
