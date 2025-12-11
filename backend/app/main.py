@@ -1,11 +1,12 @@
 from fastapi import FastAPI, Query, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, Response
+from fastapi.responses import FileResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.routing import APIRouter
 from starlette.middleware.base import BaseHTTPMiddleware
 from typing import Optional
 from pydantic import BaseModel
+import httpx
 import os
 
 from .models import SearchResponse, LyricsResponse, ErrorResponse
@@ -79,32 +80,72 @@ async def get_lyrics(
 
 @api_router.get("/stream", response_model=StreamResponse, responses={404: {"model": ErrorResponse}})
 async def get_stream(
+    request: Request,
     artist: Optional[str] = None,
     title: Optional[str] = None,
     videoId: Optional[str] = None
 ):
     if videoId:
         vid = videoId.replace("ytm_", "")
-        cache_key = f"vid_{vid}"
     else:
-        cache_key = f"{artist} {title}"
         results = await ytmusic.search(f"{artist} {title}", limit=1)
         if not results:
             raise HTTPException(status_code=404, detail={"error": "Track not found", "code": "TRACK_NOT_FOUND"})
         vid = results[0].id.replace("ytm_", "")
     
-    cached = cache.get("stream", cache_key)
-    if cached:
-        return StreamResponse(**cached)
+    # Return proxy URL instead of direct YouTube URL
+    base_url = str(request.base_url).rstrip('/')
+    proxy_url = f"{base_url}/api/v1/audio/{vid}"
     
-    # Use yt-dlp for stream extraction
-    info = await youtube.get_stream_url(vid)
-    if not info or not info.get("url"):
-        raise HTTPException(status_code=404, detail={"error": "Audio stream not found", "code": "STREAM_NOT_FOUND"})
+    # Get duration from cache or fetch
+    cache_key = f"duration_{vid}"
+    duration = cache.get("duration", vid)
+    if not duration:
+        info = await youtube.get_stream_url(vid)
+        if info:
+            duration = info.get("duration")
+            cache.set("duration", vid, duration, ttl=86400)
     
-    result = {"url": info["url"], "duration": info.get("duration")}
-    cache.set("stream", cache_key, result, ttl=3600)
-    return StreamResponse(**result)
+    return StreamResponse(url=proxy_url, duration=duration)
+
+@api_router.get("/audio/{video_id}")
+async def proxy_audio(video_id: str, request: Request):
+    """Proxy audio stream from YouTube to bypass CORS/IP restrictions"""
+    cache_key = f"yt_url_{video_id}"
+    yt_url = cache.get("yt_url", video_id)
+    
+    if not yt_url:
+        info = await youtube.get_stream_url(video_id)
+        if not info or not info.get("url"):
+            raise HTTPException(status_code=404, detail="Audio not found")
+        yt_url = info["url"]
+        cache.set("yt_url", video_id, yt_url, ttl=3600)
+    
+    # Forward range header if present
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    range_header = request.headers.get("range")
+    if range_header:
+        headers["Range"] = range_header
+    
+    async with httpx.AsyncClient() as client:
+        yt_response = await client.get(yt_url, headers=headers)
+        
+        response_headers = {
+            "Accept-Ranges": "bytes",
+            "Content-Type": yt_response.headers.get("Content-Type", "audio/webm"),
+        }
+        
+        if "Content-Length" in yt_response.headers:
+            response_headers["Content-Length"] = yt_response.headers["Content-Length"]
+        if "Content-Range" in yt_response.headers:
+            response_headers["Content-Range"] = yt_response.headers["Content-Range"]
+        
+        return StreamingResponse(
+            iter([yt_response.content]),
+            status_code=yt_response.status_code,
+            headers=response_headers,
+            media_type=response_headers["Content-Type"]
+        )
 
 # Include API router FIRST
 app.include_router(api_router)
