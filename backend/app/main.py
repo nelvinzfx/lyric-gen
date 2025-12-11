@@ -9,7 +9,7 @@ from pydantic import BaseModel
 import os
 
 from .models import SearchResponse, LyricsResponse, ErrorResponse
-from .providers import lrclib, ytmusic, youtube
+from .providers import lrclib, ytmusic
 from . import cache
 
 # Static directory for SPA
@@ -83,24 +83,29 @@ async def get_stream(
     title: Optional[str] = None,
     videoId: Optional[str] = None
 ):
+    # Get video ID - either from param or search
     if videoId:
-        video_id = videoId.replace("ytm_", "")
-        cache_key = f"vid_{video_id}"
-        query = f"https://www.youtube.com/watch?v={video_id}"
+        vid = videoId.replace("ytm_", "")
+        cache_key = f"vid_{vid}"
     else:
+        # Search for the track first
         cache_key = f"{artist} {title}"
-        query = f"{artist} - {title}"
+        results = await ytmusic.search(f"{artist} {title}", limit=1)
+        if not results:
+            raise HTTPException(status_code=404, detail={"error": "Track not found", "code": "TRACK_NOT_FOUND"})
+        vid = results[0].id.replace("ytm_", "")
     
     cached = cache.get("stream", cache_key)
     if cached:
         return StreamResponse(**cached)
     
-    info = await youtube.get_video_info(query)
+    # Use ytmusicapi directly instead of yt-dlp
+    info = await ytmusic.get_stream_url(vid)
     if not info or not info.get("url"):
         raise HTTPException(status_code=404, detail={"error": "Audio stream not found", "code": "STREAM_NOT_FOUND"})
     
     result = {"url": info["url"], "duration": info.get("duration")}
-    cache.set("stream", cache_key, result, ttl=7200)
+    cache.set("stream", cache_key, result, ttl=3600)  # shorter TTL as URLs expire
     return StreamResponse(**result)
 
 # Include API router FIRST

@@ -138,3 +138,42 @@ async def get_track(video_id: str) -> Optional[Track]:
     except Exception as e:
         print(f"YTMusic get_track error: {e}")
         return None
+
+async def get_stream_url(video_id: str) -> Optional[dict]:
+    """Get audio stream URL directly from YouTube Music API"""
+    try:
+        vid = video_id.replace("ytm_", "")
+        info = ytm.get_song(vid)
+        
+        if not info:
+            return None
+        
+        # Get streaming data
+        streaming = info.get("streamingData", {})
+        formats = streaming.get("adaptiveFormats", []) or streaming.get("formats", [])
+        
+        # Find best audio format
+        audio_url = None
+        for fmt in formats:
+            mime = fmt.get("mimeType", "")
+            if "audio" in mime:
+                audio_url = fmt.get("url")
+                if audio_url:
+                    break
+        
+        if not audio_url:
+            # Fallback to any format
+            for fmt in formats:
+                if fmt.get("url"):
+                    audio_url = fmt["url"]
+                    break
+        
+        duration = info.get("videoDetails", {}).get("lengthSeconds", 0)
+        
+        return {
+            "url": audio_url,
+            "duration": float(duration) if duration else None
+        }
+    except Exception as e:
+        print(f"YTMusic get_stream error: {e}")
+        return None
