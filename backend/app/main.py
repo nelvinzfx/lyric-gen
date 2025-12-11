@@ -28,10 +28,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Maintenance mode middleware
+# Maintenance mode middleware - only block API routes, allow static files
 @app.middleware("http")
 async def maintenance_middleware(request: Request, call_next):
-    if MAINTENANCE_MODE and not request.url.path == "/health":
+    path = request.url.path
+    # Allow: health check, static assets, and root (for SPA to load)
+    is_api = path.startswith("/api/")
+    is_allowed = path == "/health" or path.startswith("/assets") or not is_api
+    
+    if MAINTENANCE_MODE and not is_allowed:
         from fastapi.responses import JSONResponse
         return JSONResponse(
             {"maintenance": True, "message": "Site is under maintenance. Please check back soon!"},
