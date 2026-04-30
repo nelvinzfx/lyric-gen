@@ -30,6 +30,3 @@ To fully realize the potential of these UI changes, we need the following from t
 -   **Font:** Inter (default), Monospace for technical details.
 -   **Colors:** Deep blacks (`#0a0a0a`), Neon Purples (`#a855f7`), and Cyan accents.
 -   **Motion:** Spring physics for natural interactions.
-
----
-*Love, Ava*
