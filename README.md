@@ -56,6 +56,10 @@ LyricGen features three distinct visualization engines, each with unique algorit
 *   **Audio Processing:** yt-dlp
 *   **Lyrics:** syncedlyrics (LRC scraping)
 
+## Screenshoots
+![Homepage](Screenshot_20260430-180211.png)
+![Lyric](Screenshot_20260430-180254-picsay.png)
+
 ---
 
 ## Getting Started
